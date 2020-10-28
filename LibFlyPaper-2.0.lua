@@ -24,11 +24,14 @@
 --This version has been modified/created by Tim Spicer (aka: Goranaws)
     --The intent is to create aversion to let multiple addons dock with each other, seamlessly!
 
-local LibFlyPaper = _G.LibStub:NewLibrary('LibFlyPaper-1.0', 0)
+local LibFlyPaper = _G.LibStub:NewLibrary('LibFlyPaper-2.0', 0)
 if not LibFlyPaper then return end
 
 -- how far away a frame can be from another frame/edge to trigger anchoring
-local stickyTolerance = 16
+local stickyTolerance = 8
+
+LibFlyPaper.frames = {}
+local frames = LibFlyPaper.frames
 
 -- returns true if <frame> or one of the frames that <frame> is dependent on
 -- is anchored to <otherFrame> and nil otherwise
@@ -58,143 +61,6 @@ local function CanAttach(frame, otherFrame)
     return true
 end
 
--- Attachment helpers
-local function AttachToTop(frame, otherFrame, distLeft, distRight, distCenter, offset)
-    frame:ClearAllPoints()
-    -- closest to the left
-    if distLeft < distCenter and distLeft < distRight then
-        -- closest to the right
-        frame:SetPoint('BOTTOMLEFT', otherFrame, 'TOPLEFT', 0, offset)
-        return 'TL'
-    elseif distRight < distCenter and distRight < distLeft then
-        -- closest to the center
-        frame:SetPoint('BOTTOMRIGHT', otherFrame, 'TOPRIGHT', 0, offset)
-        return 'TR'
-    else
-        frame:SetPoint('BOTTOM', otherFrame, 'TOP', 0, offset)
-        return 'TC'
-    end
-end
-
-local function AttachToBottom(frame, otherFrame, distLeft, distRight, distCenter, offset)
-    frame:ClearAllPoints()
-
-    -- bottomleft
-    if distLeft < distCenter and distLeft < distRight then
-        -- bottomright
-        frame:SetPoint('TOPLEFT', otherFrame, 'BOTTOMLEFT', 0, -offset)
-        return 'BL'
-    elseif distRight < distCenter and distRight < distLeft then
-        -- bottom
-        frame:SetPoint('TOPRIGHT', otherFrame, 'BOTTOMRIGHT', 0, -offset)
-        return 'BR'
-    else
-        frame:SetPoint('TOP', otherFrame, 'BOTTOM', 0, -offset)
-        return 'BC'
-    end
-end
-
-local function AttachToLeft(frame, otherFrame, distTop, distBottom, distCenter, offset)
-    frame:ClearAllPoints()
-
-    -- bottomleft
-    if distBottom < distTop and distBottom < distCenter then
-        -- topleft
-        frame:SetPoint('BOTTOMRIGHT', otherFrame, 'BOTTOMLEFT', -offset, 0)
-        return 'LB'
-    elseif distTop < distBottom and distTop < distCenter then
-        -- left
-        frame:SetPoint('TOPRIGHT', otherFrame, 'TOPLEFT', -offset, 0)
-        return 'LT'
-    else
-        frame:SetPoint('RIGHT', otherFrame, 'LEFT', -offset, 0)
-        return 'LC'
-    end
-end
-
-local function AttachToRight(frame, otherFrame, distTop, distBottom, distCenter, offset)
-    frame:ClearAllPoints()
-
-    -- bottomright
-    if distBottom < distTop and distBottom < distCenter then
-        -- topright
-        frame:SetPoint('BOTTOMLEFT', otherFrame, 'BOTTOMRIGHT', offset, 0)
-        return 'RB'
-    elseif distTop < distBottom and distTop < distCenter then
-        -- right
-        frame:SetPoint('TOPLEFT', otherFrame, 'TOPRIGHT', offset, 0)
-        return 'RT'
-    else
-        frame:SetPoint('LEFT', otherFrame, 'RIGHT', offset, 0)
-        return 'RC'
-    end
-end
-
--- Public API
-
--- attempts to attach <frame> to <otherFrame>
--- tolerance: how close the frames need to be to attach
--- xOff: horizontal spacing to include between each frame
--- yOff: vertical spacing to include between each frame
--- returns an anchor point if attached and nil otherwise
-function LibFlyPaper.Stick(frame, otherFrame)
-    if not CanAttach(frame, otherFrame) then
-        return
-    end
-
-    local oScale = otherFrame:GetEffectiveScale()
-    local scale = frame:GetEffectiveScale()
-    local centerX, centerY = frame:GetCenter()
-    local w, h =  frame:GetSize()
-    local oW, oH =  otherFrame:GetSize()
-
-    if not (centerX and w and h and oW and oH) then
-        return
-    end
-
-    local tolerance = stickyTolerance / oScale
-
-    --Get Anchoring Points
-    -- you must divide each frames points by the other's scale,
-    --   otherwise you cant stick two frame together properly
-    --   when the moving frame is scaled larger than the stationary one.
-	
-    local left   = frame:GetLeft() / oScale
-    local right  = frame:GetRight() / oScale
-    local top    = frame:GetTop() / oScale
-    local bottom = frame:GetBottom() / oScale
-
-    centerX      = centerX / oScale
-    centerY      = centerY / oScale
-
-	if not otherFrame:GetLeft() then
-		return
-	end
-
-    local oLeft   = otherFrame:GetLeft() / scale
-    local oRight  = otherFrame:GetRight() / scale
-    local oTop    = otherFrame:GetTop() / scale
-    local oBottom = otherFrame:GetBottom() / scale
-    local oCenterX, oCenterY = otherFrame:GetCenter()
-    oCenterX, oCenterY = oCenterX / scale, oCenterY / scale
-
-
-    local vertical   = ((oLeft - tolerance <= left and oRight + tolerance >= right)   or (left - tolerance <= oLeft and right + tolerance >= oRight))   or nil
-    local horizontal = ((oTop + tolerance >= top   and oBottom - tolerance <= bottom) or (top + tolerance >= oTop   and bottom - tolerance <= oBottom)) or nil
-
-    local distCenter = vertical and math.abs(oCenterX - centerX) or horizontal and math.abs(oCenterY - centerY)
-    local distA      = vertical and math.abs(oLeft - left)       or horizontal and math.abs(oTop     - top)
-    local distB      = vertical and math.abs(right - oRight)     or horizontal and math.abs(oBottom  - bottom)
-
-    -- Start Attempting to Anchor <frame> to <otherFrame>
-        -- try to stick to the top if the distance is under the threshold
-        -- distance to stick frames to each other (tolerance)
-    return (vertical   and math.abs(oTop - bottom) <= tolerance) and AttachToTop   (frame, otherFrame, distA, distB, distCenter, yOff or 0)
-        or (vertical   and math.abs(oBottom - top) <= tolerance) and AttachToBottom(frame, otherFrame, distA, distB, distCenter, yOff or 0)
-        or (horizontal and math.abs(oLeft - right) <= tolerance) and AttachToLeft  (frame, otherFrame, distA, distB, distCenter, xOff or 0)
-        or (horizontal and math.abs(oRight - left) <= tolerance) and AttachToRight (frame, otherFrame, distA, distB, distCenter, xOff or 0)
-end
-
 -- attempts to anchor frame to a specific anchor point on otherFrame
 -- point: any non nil return value of LibFlyPaper.Stick
 -- xOff: horizontal spacing to include between each frame
@@ -216,7 +82,7 @@ local points  = {
     RT = {"TOPLEFT"     , "TOPRIGHT"    , 1 , 0},
 }
 
-function LibFlyPaper.StickToPoint(frame, otherFrame, point, xOff, yOff)
+local function StickToPoint(frame, otherFrame, point, xOff, yOff)
     -- check to make sure its actually possible to attach the frames
     if (point and points[point] and CanAttach(frame, otherFrame)) then
         frame:ClearAllPoints()
@@ -224,6 +90,144 @@ function LibFlyPaper.StickToPoint(frame, otherFrame, point, xOff, yOff)
         frame:SetPoint(anchorPoint, otherFrame, oAnchorPoint, (xOff or 0) * x, (yOff or 0) * y)
         return point
     end
+end
+
+-- attempts to attach <frame> to <otherFrame>
+-- tolerance: how close the frames need to be to attach
+-- xOff: horizontal spacing to include between each frame
+-- yOff: vertical spacing to include between each frame
+-- returns an anchor point if attached and nil otherwise
+
+local pointLabels = {
+	"RT", -- = {"TOPLEFT"     , "TOPRIGHT"    , 1 , 0},
+	"RC", -- = {"LEFT"        , "RIGHT"       , 1 , 0},
+	"RB", -- = {"BOTTOMLEFT"  , "BOTTOMRIGHT" , 1 , 0},
+	
+	"LT", -- = {"TOPRIGHT"    , "TOPLEFT"     , -1, 0},
+	"LC", -- = {"RIGHT"       , "LEFT"        , -1, 0},
+	"LB", -- = {"BOTTOMRIGHT" , "BOTTOMLEFT"  , -1, 0},
+
+	"BL", -- = {"TOPLEFT"     , "BOTTOMLEFT"  , 0 , -1},
+	"BC", -- = {"TOP"         , "BOTTOM"      , 0 , -1},
+	"BR", -- = {"TOPRIGHT"    , "BOTTOMRIGHT" , 0 , -1},
+	
+	"TL", -- = {"BOTTOMLEFT"  , "TOPLEFT"     , 0 , 1},
+	"TC", -- = {"BOTTOM"      , "TOP"         , 0 , 1},
+	"TR", -- = {"BOTTOMRIGHT" , "TOPRIGHT"    , 0 , 1},
+}
+
+local test = {}
+--determine if one frame can snap to another, and find the best possible point to snap them together
+local function Stick(frame, otherFrame)
+    if CanAttach(frame, otherFrame) then
+		local l, b, w, h = frame:GetScaledRect() --Love this function! so much math effort saved
+		local r, t = l + w, b  + h
+		local x, y = l+(w/2), b + (h/2)
+		
+		local oL, oB, oW, oH = otherFrame:GetScaledRect()
+		local oR, oT = oL + oW, oB  + oH
+		local oX, oY = oL+(oW/2), oB+ (oH/2)
+
+		local leftRight  = ((l < oR + stickyTolerance) and (l > oR - stickyTolerance)) or nil
+		local rightLeft  = ((r < oL + stickyTolerance) and (r > oL - stickyTolerance)) or nil
+		local topBottom  = ((t < oB + stickyTolerance) and (t > oB - stickyTolerance)) or nil
+		local bottomTop  = ((b < oT + stickyTolerance) and (b > oT - stickyTolerance)) or nil
+	
+		if ((leftRight or rightLeft) or (topBottom or bottomTop)) then
+			local top    = ((leftRight or rightLeft) and (t < oT + stickyTolerance) and (t > oT - stickyTolerance)) and math.abs(t - oT) or nil
+			local middle = ((leftRight or rightLeft) and (y < oY + stickyTolerance) and (y > oY - stickyTolerance)) and math.abs(y - oY) or nil
+			local bottom = ((leftRight or rightLeft) and (b < oB + stickyTolerance) and (b > oB - stickyTolerance)) and math.abs(b - oB) or nil
+				--better accuracy, record how close each possible snap point is, so we can find the closest one, instead of just the first possible one.
+			local left   = ((topBottom or bottomTop) and (l < oL + stickyTolerance) and (l > oL - stickyTolerance)) and math.abs(l - oL) or nil
+			local center = ((topBottom or bottomTop) and (x < oX + stickyTolerance) and (x > oX - stickyTolerance)) and math.abs(x - oX) or nil
+			local right  = ((topBottom or bottomTop) and (r < oR + stickyTolerance) and (r > oR - stickyTolerance)) and math.abs(r - oR) or nil
+			
+			local TLtoTR = leftRight and top
+			local XLtoXR = leftRight and middle
+			local BLtoBR = leftRight and bottom
+			
+			local TRtoTL = rightLeft and top
+			local XRtoXL = rightLeft and middle
+			local BRtoBL = rightLeft and bottom
+			
+			local TLtoBL = topBottom and left
+			local TYtoBY = topBottom and center
+			local TRtoBR = topBottom and right
+			
+			local BLtoTL = bottomTop and left
+			local BYtoTY = bottomTop and center
+			local BRtoTR = bottomTop and right
+
+			wipe(test)
+			
+			local huge = math.huge
+			
+			tinsert(test, TLtoTR or huge)
+			tinsert(test, XLtoXR or huge)
+			tinsert(test, BLtoBR or huge)
+			
+			tinsert(test, TRtoTL or huge)
+			tinsert(test, XRtoXL or huge)
+			tinsert(test, BRtoBL or huge)
+			
+			tinsert(test, TLtoBL or huge)
+			tinsert(test, TYtoBY or huge)
+			tinsert(test, TRtoBR or huge)
+			
+			tinsert(test, BLtoTL or huge)
+			tinsert(test, BYtoTY or huge)
+			tinsert(test, BRtoTR or huge)
+
+			local last = huge
+			local index
+			for i, b in pairs(test) do
+				if b < last then
+					last = b
+					index = i
+				end
+			end
+							
+			local point = index and pointLabels[index]
+
+			return point, last
+		end
+    end
+end
+
+local test = {}
+--Greatly Improves accuracy.
+local function FindBestStick(frame, xOff, yOff)
+	wipe(test)
+	for _, f in pairs(frames) do
+		if f ~= frame then
+			local point, range = Stick(frame, f)
+			if point then
+				--find any frames with points in sticky range, store them
+				tinsert(test, {f, point, range})
+			end
+		end
+	end
+	
+	local last, index = math.huge
+	for i, b in pairs(test) do
+		if b[3] < last then
+			--sort all possible sticky points and find the the closest one.
+			index = i
+			last = b[3]
+		end
+	end
+	
+	if index then
+		local otherFrame, point, range = unpack(test[index])
+		if point then
+			StickToPoint(frame, otherFrame, point, xOff, yOff)
+			frame:SetAnchor(otherFrame, point)
+		else
+			frame:ClearAnchor()
+		end
+	else
+		frame:ClearAnchor()
+	end
 end
 
 
@@ -256,8 +260,6 @@ end
 			scaled frame to it, or it to a smaller frame.
 --]]
 
-LibFlyPaper.frames = {}
-local frames = LibFlyPaper.frames
 
 local FlyPaperMixin = {}
 do
@@ -269,7 +271,7 @@ do
 	--------------------------------------------------------------------------------
 	
 	-- how far away a frame can be from another frame/edge to trigger anchoring
-	FlyPaperMixin.stickyTolerance = 8
+	FlyPaperMixin.stickyTolerance = stickyTolerance
 
 	-- edge anchoring
 	function FlyPaperMixin:StickToEdge()
@@ -299,16 +301,7 @@ do
 		-- only do sticky code if the alt key is not currently down
 		if self:Sticky() and not IsAltKeyDown() then
 			-- try to stick to a bar, then try to stick to a screen edge
-			for _, f in pairs(LibFlyPaper.frames) do
-				if f ~= self then
-					local point = LibFlyPaper.Stick(self, f, self:GetFrameScale())
-					if point then
-						
-						self:SetAnchor(f, point)
-						break
-					end
-				end
-			end
+			FindBestStick(self)	
 			if not self:GetAnchor() then
 				self:StickToEdge()
 			end
@@ -317,9 +310,9 @@ do
 	end
 
 	function FlyPaperMixin:Reanchor()
-		local f, point, k, l, j = self:GetAnchor()
+		local f, point = self:GetAnchor()
 
-		if not (f and LibFlyPaper.StickToPoint(self, f, point)) then
+		if not (f and StickToPoint(self, f, point)) then
 			self:ClearAnchor()
 			self:Reposition()
 		else
@@ -583,6 +576,12 @@ function LibFlyPaper:PositionAllFrames()
 	end
 end
 
+function LibFlyPaper:ValidatePositions()
+	for i, b in pairs(frames) do
+		b:SetPoint("Center", UIParent)
+	end
+end
+
 local paper = embed(LibFlyPaper, CreateFrame("Frame"))
 
 paper:RegisterEvent("ADDON_LOADED")
@@ -613,6 +612,7 @@ function LibFlyPaper:ActivateForAddon(AddonName)
 	if (not complete) and ready and count(addons) == triggered then
 		--once all addons are ready, trigger FlyPaper to place everything.
 		complete = true
+		self:ValidatePositions()
 		self:PositionAllFrames()
 	end
 end
