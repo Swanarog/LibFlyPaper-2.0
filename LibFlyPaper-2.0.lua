@@ -21,10 +21,10 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
---This version has been modified/created by Tim Spicer (aka: Goranaws)
+--This version has been created by Tim Spicer (aka: Goranaws)
     --The intent is to create aversion to let multiple addons dock with each other, seamlessly!
 
-local LibFlyPaper = _G.LibStub:NewLibrary('LibFlyPaper-2.0', 0)
+local LibFlyPaper = _G.LibStub:NewLibrary('LibFlyPaper-1.0', 0)
 if not LibFlyPaper then return end
 
 -- how far away a frame can be from another frame/edge to trigger anchoring
@@ -33,6 +33,75 @@ local stickyTolerance = 8
 LibFlyPaper.frames = {}
 local frames = LibFlyPaper.frames
 
+local AllowCornerToCorner = nil
+local AllowCornerToSide = true
+
+local stickies = {
+	{"TopLeft",     {
+		"TopRight",
+		"Right",
+		"Bottom",
+		"BottomLeft",
+		"BottomRight", --Corner to Corner
+
+	}},
+	{"Top",         {
+		"BottomLeft",
+		"Bottom",
+		"BottomRight",
+	}},
+	{"TopRight",    {
+		"BottomRight",
+		"Bottom",
+		"Left",
+		"TopLeft",
+		"BottomLeft", --Corner to Corner
+
+	}},
+	{"Right",       {
+		"BottomLeft",
+		"Left",
+		"TopLeft",
+	}},
+	{"BottomRight", {
+		"BottomLeft",
+		"Left",
+		"Top",
+		"TopRight",
+		"TopLeft", --Corner to Corner
+
+	}},
+	{"Bottom",      {
+		"TopLeft",
+		"Top",
+		"TopRight",
+	}},
+	{"BottomLeft",  {
+		"TopLeft",
+		"Top",
+		"Right",
+		"BottomRight",
+		"TopRight", --Corner to Corner
+
+	}},
+	{"Left",        {
+		"BottomRight",
+		"Right",
+		"TopRight",
+	}},
+}
+
+local position = {
+	BottomLeft  = { 0,  0},
+	Bottom      = {.5,  0},
+	BottomRight = { 1,  0},
+	Right       = { 1, .5},
+	TopRight    = { 1,  1},
+	Top         = {.5,  1},
+	TopLeft     = { 0,  1},
+	Left        = { 0, .5},
+}
+
 -- returns true if <frame> or one of the frames that <frame> is dependent on
 -- is anchored to <otherFrame> and nil otherwise
 local function FrameIsDependentOnFrame(frame, otherFrame)
@@ -40,7 +109,6 @@ local function FrameIsDependentOnFrame(frame, otherFrame)
         if frame == otherFrame then
             return true
         end
-
         local points = frame:GetNumPoints()
         for i = 1, points do
             local parent = select(2, frame:GetPoint(i))
@@ -61,34 +129,25 @@ local function CanAttach(frame, otherFrame)
     return true
 end
 
--- attempts to anchor frame to a specific anchor point on otherFrame
--- point: any non nil return value of LibFlyPaper.Stick
--- xOff: horizontal spacing to include between each frame
--- yOff: vertical spacing to include between each frame
--- returns an anchor point if attached and nil otherwise
+local function GetPoint(index)
+	local pointIndex, oPointindex = index:sub(1, 1), index:sub(2)
+	pointIndex = pointIndex and tonumber(pointIndex)
+	oPointindex = oPointindex and tonumber(oPointindex)
+	
+	if stickies[pointIndex] then
+		local point, points  = unpack(stickies[pointIndex])
+		oPoint = points[oPointindex]
+		return point, oPoint
+	end
+end
 
-local points  = {
-    TL = {"BOTTOMLEFT"  , "TOPLEFT"     , 0 , 1},
-    TC = {"BOTTOM"      , "TOP"         , 0 , 1},
-    TR = {"BOTTOMRIGHT" , "TOPRIGHT"    , 0 , 1},
-    BL = {"TOPLEFT"     , "BOTTOMLEFT"  , 0 , -1},
-    BC = {"TOP"         , "BOTTOM"      , 0 , -1},
-    BR = {"TOPRIGHT"    , "BOTTOMRIGHT" , 0 , -1},
-    LB = {"BOTTOMRIGHT" , "BOTTOMLEFT"  , -1, 0},
-    LC = {"RIGHT"       , "LEFT"        , -1, 0},
-    LT = {"TOPRIGHT"    , "TOPLEFT"     , -1, 0},
-    RB = {"BOTTOMLEFT"  , "BOTTOMRIGHT" , 1 , 0},
-    RC = {"LEFT"        , "RIGHT"       , 1 , 0},
-    RT = {"TOPLEFT"     , "TOPRIGHT"    , 1 , 0},
-}
-
-local function StickToPoint(frame, otherFrame, point, xOff, yOff)
+local function StickToPoint(frame, otherFrame, index)
+	local point, oPoint = GetPoint(index)
     -- check to make sure its actually possible to attach the frames
-    if (point and points[point] and CanAttach(frame, otherFrame)) then
+    if (point and CanAttach(frame, otherFrame)) then
         frame:ClearAllPoints()
-        local anchorPoint, oAnchorPoint, x, y = unpack(points[point])
-        frame:SetPoint(anchorPoint, otherFrame, oAnchorPoint, (xOff or 0) * x, (yOff or 0) * y)
-        return point
+        frame:SetPoint(point, otherFrame, oPoint)
+        return index
     end
 end
 
@@ -98,138 +157,67 @@ end
 -- yOff: vertical spacing to include between each frame
 -- returns an anchor point if attached and nil otherwise
 
-local pointLabels = {
-	"RT", -- = {"TOPLEFT"     , "TOPRIGHT"    , 1 , 0},
-	"RC", -- = {"LEFT"        , "RIGHT"       , 1 , 0},
-	"RB", -- = {"BOTTOMLEFT"  , "BOTTOMRIGHT" , 1 , 0},
-	
-	"LT", -- = {"TOPRIGHT"    , "TOPLEFT"     , -1, 0},
-	"LC", -- = {"RIGHT"       , "LEFT"        , -1, 0},
-	"LB", -- = {"BOTTOMRIGHT" , "BOTTOMLEFT"  , -1, 0},
-
-	"BL", -- = {"TOPLEFT"     , "BOTTOMLEFT"  , 0 , -1},
-	"BC", -- = {"TOP"         , "BOTTOM"      , 0 , -1},
-	"BR", -- = {"TOPRIGHT"    , "BOTTOMRIGHT" , 0 , -1},
-	
-	"TL", -- = {"BOTTOMLEFT"  , "TOPLEFT"     , 0 , 1},
-	"TC", -- = {"BOTTOM"      , "TOP"         , 0 , 1},
-	"TR", -- = {"BOTTOMRIGHT" , "TOPRIGHT"    , 0 , 1},
-}
-
-local test = {}
---determine if one frame can snap to another, and find the best possible point to snap them together
-local function Stick(frame, otherFrame)
-    if CanAttach(frame, otherFrame) then
-		local l, b, w, h = frame:GetScaledRect() --Love this function! so much math effort saved
-		local r, t = l + w, b  + h
-		local x, y = l+(w/2), b + (h/2)
-		
-		local oL, oB, oW, oH = otherFrame:GetScaledRect()
-		local oR, oT = oL + oW, oB  + oH
-		local oX, oY = oL+(oW/2), oB+ (oH/2)
-
-		local leftRight  = ((l < oR + stickyTolerance) and (l > oR - stickyTolerance)) or nil
-		local rightLeft  = ((r < oL + stickyTolerance) and (r > oL - stickyTolerance)) or nil
-		local topBottom  = ((t < oB + stickyTolerance) and (t > oB - stickyTolerance)) or nil
-		local bottomTop  = ((b < oT + stickyTolerance) and (b > oT - stickyTolerance)) or nil
-	
-		if ((leftRight or rightLeft) or (topBottom or bottomTop)) then
-			local top    = ((leftRight or rightLeft) and (t < oT + stickyTolerance) and (t > oT - stickyTolerance)) and math.abs(t - oT) or nil
-			local middle = ((leftRight or rightLeft) and (y < oY + stickyTolerance) and (y > oY - stickyTolerance)) and math.abs(y - oY) or nil
-			local bottom = ((leftRight or rightLeft) and (b < oB + stickyTolerance) and (b > oB - stickyTolerance)) and math.abs(b - oB) or nil
-				--better accuracy, record how close each possible snap point is, so we can find the closest one, instead of just the first possible one.
-			local left   = ((topBottom or bottomTop) and (l < oL + stickyTolerance) and (l > oL - stickyTolerance)) and math.abs(l - oL) or nil
-			local center = ((topBottom or bottomTop) and (x < oX + stickyTolerance) and (x > oX - stickyTolerance)) and math.abs(x - oX) or nil
-			local right  = ((topBottom or bottomTop) and (r < oR + stickyTolerance) and (r > oR - stickyTolerance)) and math.abs(r - oR) or nil
-			
-			local TLtoTR = leftRight and top
-			local XLtoXR = leftRight and middle
-			local BLtoBR = leftRight and bottom
-			
-			local TRtoTL = rightLeft and top
-			local XRtoXL = rightLeft and middle
-			local BRtoBL = rightLeft and bottom
-			
-			local TLtoBL = topBottom and left
-			local TYtoBY = topBottom and center
-			local TRtoBR = topBottom and right
-			
-			local BLtoTL = bottomTop and left
-			local BYtoTY = bottomTop and center
-			local BRtoTR = bottomTop and right
-
-			wipe(test)
-			
-			local huge = math.huge
-			
-			tinsert(test, TLtoTR or huge)
-			tinsert(test, XLtoXR or huge)
-			tinsert(test, BLtoBR or huge)
-			
-			tinsert(test, TRtoTL or huge)
-			tinsert(test, XRtoXL or huge)
-			tinsert(test, BRtoBL or huge)
-			
-			tinsert(test, TLtoBL or huge)
-			tinsert(test, TYtoBY or huge)
-			tinsert(test, TRtoBR or huge)
-			
-			tinsert(test, BLtoTL or huge)
-			tinsert(test, BYtoTY or huge)
-			tinsert(test, BRtoTR or huge)
-
-			local last = huge
-			local index
-			for i, b in pairs(test) do
-				if b < last then
-					last = b
-					index = i
-				end
-			end
-							
-			local point = index and pointLabels[index]
-
-			return point, last
-		end
-    end
-end
-
-local test = {}
 --Greatly Improves accuracy.
 local function FindBestStick(frame, xOff, yOff)
-	wipe(test)
+	local range = math.huge
+	local oFrame, index
+	local l, b, w, h = frame:GetScaledRect() --Love this function! so much math effort saved
+	
 	for _, f in pairs(frames) do
-		if f ~= frame then
-			local point, range = Stick(frame, f)
-			if point then
-				--find any frames with points in sticky range, store them
-				tinsert(test, {f, point, range})
+		if f ~= frame and CanAttach(frame, f) then
+			local point, r = nil, math.huge
+			local oL, oB, oW, oH = f:GetScaledRect()
+			
+			local oRange = math.huge
+			local pointIndex, oPointindex
+			for i, info in ipairs(stickies) do
+				local possiblePoint, points = unpack(info)
+				local num = #points
+				for j, oPossiblePoint in ipairs(points) do
+					local ignoreCornerToSide = (not AllowCornerToSide) and ((num == 5 and (j == 2 or j == 3)) or ((num == 3) and (j ~= 2)))
+					local ignoreCornerToCorner = (not AllowCornerToCorner) and (num == 5 and (j == 5))
+					
+					if not (ignoreCornerToCorner or ignoreCornerToSide) then
+						local x, y = unpack(position[possiblePoint])
+						x = l + (w * x)
+						y = b + (h * y)
+						
+						local oX, oY = unpack(position[oPossiblePoint])
+						oX = oL + (oW * oX)
+						oY = oB + (oH * oY)
+						
+						xDist = math.abs(oX - x)
+						yDist = math.abs(oY - y)
+						
+						local d = math.min(xDist, yDist)
+						if (xDist < stickyTolerance and yDist < stickyTolerance and d < oRange) then
+							oRange = d
+							pointIndex, oPointindex = i, j
+						end
+					end
+				end
+			end
+			
+			if pointIndex and oPointindex then
+				point, r = pointIndex..oPointindex, oRange
+			end
+			
+			if point and r <= range then
+				range = r
+				oFrame = f
+				index = point
 			end
 		end
 	end
 	
-	local last, index = math.huge
-	for i, b in pairs(test) do
-		if b[3] < last then
-			--sort all possible sticky points and find the the closest one.
-			index = i
-			last = b[3]
-		end
-	end
-	
-	if index then
-		local otherFrame, point, range = unpack(test[index])
-		if point then
-			StickToPoint(frame, otherFrame, point, xOff, yOff)
-			frame:SetAnchor(otherFrame, point)
-		else
-			frame:ClearAnchor()
-		end
+	if oFrame then
+		StickToPoint(frame, oFrame, index, xOff, yOff)
+		frame:SetAnchor(oFrame, index)
+		frame:UpdateDocked()
 	else
 		frame:ClearAnchor()
 	end
 end
-
 
 --[[ Delete (or rewrite) this explanation before release!
 		
@@ -320,6 +308,21 @@ do
 		end
 	end
 
+	function FlyPaperMixin:UpdateDocked(initiator)
+		if self ~= initiator and self.docked then
+			for i, b in pairs(self.docked) do
+				if b ~= self then
+					if b.docked then
+						b:UpdateDocked(initiator or self)
+					end
+					b:SaveRelativeFramePosition()
+				end
+			end
+		end
+	end
+
+
+
 	function FlyPaperMixin:SetAnchor(anchor, point)
 		self:ClearAnchor()
 		if anchor.docked then
@@ -344,8 +347,8 @@ do
 		end
 	end
 
-	function FlyPaperMixin:ClearAnchor()
-		local anchor = self:GetAnchor()
+	function FlyPaperMixin:ClearAnchor(anchor)
+		local anchor = anchor or self:GetAnchor()
 
 		if anchor and anchor.docked then
 			for i, f in pairs(anchor.docked) do
@@ -375,8 +378,13 @@ do
 	function FlyPaperMixin:GetAnchor()
 		local anchorString = self.sets.anchor
 		if anchorString then
-			local pointStart = #anchorString - 1
-			return Get(anchorString:sub(1, pointStart - 1)), anchorString:sub(pointStart)
+			local pointStart = #anchorString
+			local oFrame, pointIndex = Get(anchorString:sub(1, pointStart - 2)), anchorString:sub(pointStart-1)
+			if oFrame and GetPoint(pointIndex) then
+				return oFrame, pointIndex
+			else
+				self:ClearAnchor(anchorString:sub(pointStart-1))
+			end
 		end
 	end
 
@@ -484,7 +492,8 @@ do
 
 end
 
-local embed -- quick method to add all functions to each frame.
+-- quick method to add all functions to each frame.
+local embed
 embed = function(source, destination)
 	destination.storeForDisembed = destination.storeForDisembed or {} -- need to restore anything rewritten when a frame is removed
 	for i, b in pairs(source) do
@@ -498,7 +507,8 @@ embed = function(source, destination)
 	return destination
 end
 
-local disembed -- quick method to remove all functions from a frame.
+-- quick method to remove all functions from a frame.
+local disembed
 disembed = function(source, destination)
 	if destination.storeForDisembed then
 		for i, b in pairs(source) do
@@ -558,7 +568,6 @@ function LibFlyPaper:FindDependencies()
 	end
 end
 
-
 local _count = 0 
 local function count(_table)
 	_count = 0
@@ -578,6 +587,9 @@ end
 
 function LibFlyPaper:ValidatePositions()
 	for i, b in pairs(frames) do
+		b:ClearAllPoints()
+		b:SetUserPlaced(true)
+		b:SetMovable(true)
 		b:SetPoint("Center", UIParent)
 	end
 end
@@ -591,7 +603,6 @@ paper:SetScript("OnEvent", function(self, event, name, ...)
 	self:FindDependencies()
 	self:UnregisterEvent("ADDON_LOADED")
 end)
-
 
 local triggered = 0
 local complete
@@ -621,9 +632,6 @@ end
 
 
 --[[ Usage
-
-	
-
 	LibFlyPaper:RegisterFrame(AddonName, Addon, frame)
 		--Register frames with FlyPaper
 		
