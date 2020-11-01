@@ -24,19 +24,19 @@
 --This version has been created by Tim Spicer (aka: Goranaws)
     --The intent is to create aversion to let multiple addons dock with each other, seamlessly!
 
-local LibFlyPaper = _G.LibStub:NewLibrary('LibFlyPaper-1.0', 0)
+local LibFlyPaper = _G.LibStub:NewLibrary('LibFlyPaper-2.0', 0)
 if not LibFlyPaper then return end
 
 -- how far away a frame can be from another frame/edge to trigger anchoring
-local stickyTolerance = 8
+local stickyTolerance = 9
 
-LibFlyPaper.frames = {}
-local frames = LibFlyPaper.frames
+LibFlyPaper.framesDatabase = {}
+local framesDatabase = LibFlyPaper.framesDatabase
 
 local AllowCornerToCorner = nil
 local AllowCornerToSide = true
 
-local stickies = {
+local viableStickPoints = {
 	{"TopLeft",     {
 		"TopRight",
 		"Right",
@@ -134,8 +134,8 @@ local function GetPoint(index)
 	pointIndex = pointIndex and tonumber(pointIndex)
 	oPointindex = oPointindex and tonumber(oPointindex)
 	
-	if stickies[pointIndex] then
-		local point, points  = unpack(stickies[pointIndex])
+	if viableStickPoints[pointIndex] then
+		local point, points  = unpack(viableStickPoints[pointIndex])
 		oPoint = points[oPointindex]
 		return point, oPoint
 	end
@@ -146,7 +146,7 @@ local function StickToPoint(frame, otherFrame, index)
     -- check to make sure its actually possible to attach the frames
     if (point and CanAttach(frame, otherFrame)) then
         frame:ClearAllPoints()
-        frame:SetPoint(point, otherFrame, oPoint)
+        frame:oldSetPoint(point, otherFrame, oPoint)
         return index
     end
 end
@@ -163,43 +163,45 @@ local function FindBestStick(frame, xOff, yOff)
 	local oFrame, index
 	local l, b, w, h = frame:GetScaledRect() --Love this function! so much math effort saved
 	
-	for _, f in pairs(frames) do
+	for _, f in pairs(framesDatabase) do
 		if f ~= frame and CanAttach(frame, f) then
 			local point, r = nil, math.huge
 			local oL, oB, oW, oH = f:GetScaledRect()
 			
-			local oRange = math.huge
+			
+			local stickyRange = math.huge
 			local pointIndex, oPointindex
-			for i, info in ipairs(stickies) do
-				local possiblePoint, points = unpack(info)
-				local num = #points
-				for j, oPossiblePoint in ipairs(points) do
-					local ignoreCornerToSide = (not AllowCornerToSide) and ((num == 5 and (j == 2 or j == 3)) or ((num == 3) and (j ~= 2)))
-					local ignoreCornerToCorner = (not AllowCornerToCorner) and (num == 5 and (j == 5))
-					
-					if not (ignoreCornerToCorner or ignoreCornerToSide) then
-						local x, y = unpack(position[possiblePoint])
-						x = l + (w * x)
-						y = b + (h * y)
+			if oL and oB and oW and oH then
+				for i, info in ipairs(viableStickPoints) do
+					local possiblePoint, points = unpack(info)
+					local num = #points
+					for j, oPossiblePoint in ipairs(points) do
+						local ignoreCornerToSide = (not AllowCornerToSide) and ((num == 5 and (j == 2 or j == 3)) or ((num == 3) and (j ~= 2)))
+						local ignoreCornerToCorner = (not AllowCornerToCorner) and (num == 5 and (j == 5))
 						
-						local oX, oY = unpack(position[oPossiblePoint])
-						oX = oL + (oW * oX)
-						oY = oB + (oH * oY)
-						
-						xDist = math.abs(oX - x)
-						yDist = math.abs(oY - y)
-						
-						local d = math.min(xDist, yDist)
-						if (xDist < stickyTolerance and yDist < stickyTolerance and d < oRange) then
-							oRange = d
-							pointIndex, oPointindex = i, j
+						if not (ignoreCornerToCorner or ignoreCornerToSide) then
+							local x, y = unpack(position[possiblePoint])
+							x = l + (w * x)
+							y = b + (h * y)
+							
+							local oX, oY = unpack(position[oPossiblePoint])
+							oX = oL + (oW * oX)
+							oY = oB + (oH * oY)
+							
+							xDist = math.abs(oX - x)
+							yDist = math.abs(oY - y)
+							
+							local d = math.min(xDist, yDist)
+							if (xDist < stickyTolerance and yDist < stickyTolerance and d < stickyRange) then
+								stickyRange = d
+								pointIndex, oPointindex = i, j
+							end
 						end
 					end
 				end
 			end
-			
 			if pointIndex and oPointindex then
-				point, r = pointIndex..oPointindex, oRange
+				point, r = pointIndex..oPointindex, stickyRange
 			end
 			
 			if point and r <= range then
@@ -218,36 +220,6 @@ local function FindBestStick(frame, xOff, yOff)
 		frame:ClearAnchor()
 	end
 end
-
---[[ Delete (or rewrite) this explanation before release!
-		
-		How the following code works:
-		
-		1: FlyPaper Checks ALL addons for any that
-			might need FlyPaper and counts them.
-			
-		2: Addons that need FlyPaper should then 
-			add their frames to FlyPaper
-			
-		3: Addons send a signal to FlyPaper that 
-			it's ready for FlyPaper to position frames.
-			
-		4: As addons send the signal, FlyPaper 
-			counts them again.
-			
-		5: Once the count from step 4 matches the 
-			count from step 1, FlyPaper will then 
-			position all frames.
-		
-	P.S. I altered the above code, as i discovered 
-		that frames of different scales did not 
-		always snap to each other, even when the two 
-		were isolated away from other frames.
-			*This can be tested by scaling one frame
-			above 120%, and trying to stick a smaller
-			scaled frame to it, or it to a smaller frame.
---]]
-
 
 local FlyPaperMixin = {}
 do
@@ -321,8 +293,6 @@ do
 		end
 	end
 
-
-
 	function FlyPaperMixin:SetAnchor(anchor, point)
 		self:ClearAnchor()
 		if anchor.docked then
@@ -372,7 +342,7 @@ do
 
 	local function Get(id)
 
-		return frames[id]
+		return framesDatabase[id]
 	end
 
 	function FlyPaperMixin:GetAnchor()
@@ -392,7 +362,7 @@ do
 	function FlyPaperMixin:SetFramePosition(...)
 		--if not self:GetAnchor() then
 			self:ClearAllPoints()
-			self:SetPoint(...)
+			self:oldSetPoint(...)
 		--end
 	end
 
@@ -464,14 +434,14 @@ do
 	end
 
 	function FlyPaperMixin:Reposition()
-		self:AttemptRescale()
+		--self:AttemptRescale()
 		self:SetFramePosition(self:GetSavedFramePosition())
 	end
 
 	function FlyPaperMixin:SaveFramePosition(point, x, y)
 		point = point or 'CENTER'
-		x = roundPoint(x)
-		y = roundPoint(y)
+		--x = roundPoint(x) --why intentionally loose precision? loss is not worth data saved.
+		--y = roundPoint(y) --why intentionally loose precision? loss is not worth data saved.
 
 		local sets = self.sets
 		sets.point = point ~= 'CENTER' and point or nil
@@ -489,7 +459,6 @@ do
 
 		return point, x, y
 	end
-
 end
 
 -- quick method to add all functions to each frame.
@@ -522,27 +491,157 @@ disembed = function(source, destination)
 	end
 end
 
+local function frameHasMovedOrResized(frame, reason)
+	if not LibFlyPaper.Ready then return end
+	print(frame.id, reason)
+	if reason == "isMoving" then
+		--placeholder for now
+			--Perhaps allow active snapping attempts, while frame is moving
+	elseif reason == "Save" then
+		frame:SaveRelativeFramePosition()
+	elseif reason == "hasMoved" then
+		frame:Stick()
+	elseif reason == "sizeChanged" then
+		frame:Reanchor()
+	end
+end
+
 local addons = {}
+
+local names = {}
+local ids = {}
+local NameGenerator
+NameGenerator = function (AddonName)
+	ids[AddonName] = ids[AddonName] or {}
+	names[AddonName] = names[AddonName] and names[AddonName] + 1 or 1
+
+	if ids[AddonName][names[AddonName]] then
+		return NameGenerator(AddonName)
+	end
+
+	return AddonName..names[AddonName]
+end
+
 function LibFlyPaper:RegisterFrame(AddonName, Addon, frame)
+	
+	frame.id = frame.id or frame.ID or frame.Id or frame.iD or frame:GetName()
+	if not frame.id then
+		--frame.id =  NameGenerator(AddonName)
+	else
+		ids[AddonName] = ids[AddonName] or {}
+	end
+
+	if frame.id and framesDatabase[AddonName..(frame.id)] then
+		return
+	end
+
 	embed(FlyPaperMixin, frame) --as frames are added, add the positioning functions to each frame.
-	addons[AddonName] = addons[AddonName] or false --Lets FlyPaper know that this addon has begun adding frames.
 	if frame.id then
+		ids[AddonName][frame.id] = frame.id
+		addons[AddonName] = addons[AddonName] or false --Lets FlyPaper know that this addon has begun adding frames.
 		frame.oldSticky = frame.Sticky
 		function frame:Sticky() return Addon.Sticky and Addon:Sticky() or true end
 		frame.oldGetFrameScale = frame.GetFrameScale
 		frame.GetFrameScale = frame.GetFrameScale or frame.GetScale
 		frame:SetMovable(true)
+		frame:SetUserPlaced(true)
 		frame.AddonName = AddonName
-		frames[AddonName..(frame.id)] = frame
+		framesDatabase[AddonName..(frame.id)] = frame
+		frame.sets = frame.sets or {}
+		frame.embeded = true
+		do --add call backs to any functions an addon might call, so that FlyPaper can handle sticky
+			frame.oldSetPoint = frame.SetPoint
+			function frame:SetPoint(...)
+				 local parent = select(2, {...})
+			
+				if  (not _G[parent])  or CanAttach(frame, parent) then
+					local f = {frame:oldSetPoint(...)}
+					if frame.embeded then
+						frameHasMovedOrResized(frame, "Save")
+					end
+					return unpack(f)
+				end
+			end
+
+			frame.oldSetAllPoints = frame.SetAllPoints
+			function frame:SetAllPoints(...)
+				local f = {frame:oldSetAllPoints(...)}
+				if frame.embeded then
+					frameHasMovedOrResized(frame, "hasMoved")
+				end
+				return unpack(f)
+			end
+			
+			frame.oldStopMovingOrSizing = frame.StopMovingOrSizing
+			function frame:StopMovingOrSizing(...)
+				local f = {frame:oldStopMovingOrSizing(...)}
+				if frame.embeded then
+					frameHasMovedOrResized(frame, "hasMoved")
+				end
+				return unpack(f)
+			end
+
+			frame.oldSetScale = frame.SetScale
+			local lastScale = frame:GetScale()
+			function frame:SetScale(scale)
+				if lastScale~=scale then
+					local f = {frame:oldSetScale(scale)}
+					if frame.embeded then
+						frameHasMovedOrResized(frame, "sizeChanged")
+					end
+					lastScale = scale
+					return unpack(f)
+				end
+			end
+
+			frame.oldSetWidth = frame.SetWidth                       --save the old function and make it accessible
+			local lastW, last = frame:GetSize()                      --store the start values
+			function frame:SetWidth(w)                               --create the replacement
+				if lastW~=w then                                     --ignore the call, unless something is going to change.
+					local f = {frame:oldSetWidth(w)}                 --call the old function, and store any return values
+					if frame.embeded then                            --if we've unregistered a frame, ignore callback
+						frameHasMovedOrResized(frame, "sizeChanged") --make the callBack
+					end
+					lastW = w                                         --store new value, so we can track changes
+					return unpack(f)                                  --return any return values from old function call
+				end
+			end
+
+			frame.oldSetHeight = frame.SetHeight
+			function frame:SetHeight(h)
+				if lastH~=h then
+					local f = {frame:oldSetHeight(h)}
+					if frame.embeded then
+						frameHasMovedOrResized(frame, "sizeChanged")
+					end
+					lastH = h
+					return unpack(f)
+				end
+			end
+
+			frame.oldSetSize = frame.SetSize
+			function frame:SetSize(w, h)
+				if lastH~=h or lastW ~=w then
+					local f = {frame:oldSetSize(w, h)}
+					if frame.embeded then
+						frameHasMovedOrResized(frame, "sizeChanged")
+					end
+					lastH = h
+					lastW = W
+					return unpack(f)
+				end
+			end
+		end
 	end
 end
 
 function LibFlyPaper:UnRegisterFrame(AddonName, Addon, frame) --this has been tested to work. it does work!
-	if frames[AddonName..(frame.id)] then
+	if framesDatabase[AddonName..(frame.id)] then
 		disembed(FlyPaperMixin, frame)
 		frame.Sticky = frame.oldSticky
 		frame.GetFrameScale = frame.oldGetFrameScale
-		frames[AddonName..(frame.id)] = nil		
+		framesDatabase[AddonName..(frame.id)] = nil		
+		frame.embeded = nil
 	end
 end
 
@@ -580,17 +679,17 @@ local function count(_table)
 end
 
 function LibFlyPaper:PositionAllFrames()
-	for i, b in pairs(frames) do
+	for i, b in pairs(framesDatabase) do
 		b:Reanchor()
 	end
 end
 
 function LibFlyPaper:ValidatePositions()
-	for i, b in pairs(frames) do
+	for i, b in pairs(framesDatabase) do
 		b:ClearAllPoints()
 		b:SetUserPlaced(true)
 		b:SetMovable(true)
-		b:SetPoint("Center", UIParent)
+		b:oldSetPoint("Center", UIParent)
 	end
 end
 
@@ -622,10 +721,12 @@ function LibFlyPaper:ActivateForAddon(AddonName)
 
 	if (not complete) and ready and count(addons) == triggered then
 		--once all addons are ready, trigger FlyPaper to place everything.
+		self:ValidatePositions() -- Make sure all frames are on screen, before placing them.
+		self:PositionAllFrames() -- Place all frames.
 		complete = true
-		self:ValidatePositions()
-		self:PositionAllFrames()
 	end
+	
+	self.Ready = complete
 end
 
 
