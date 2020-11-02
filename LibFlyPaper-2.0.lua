@@ -24,7 +24,7 @@
 --This version has been created by Tim Spicer (aka: Goranaws)
     --The intent is to create aversion to let multiple addons dock with each other, seamlessly!
 
-local LibFlyPaper = _G.LibStub:NewLibrary('LibFlyPaper-2.0', 0)
+local LibFlyPaper = _G.LibStub:NewLibrary('LibFlyPaper-1.0', 0)
 if not LibFlyPaper then return end
 
 -- how far away a frame can be from another frame/edge to trigger anchoring
@@ -91,7 +91,7 @@ local viableStickPoints = {
 	}},
 }
 
-local position = {
+local position = { --this details the offset for each point from a frames BottomLeft corner, based on the frames height and width.
 	BottomLeft  = { 0,  0},
 	Bottom      = {.5,  0},
 	BottomRight = { 1,  0},
@@ -99,7 +99,7 @@ local position = {
 	TopRight    = { 1,  1},
 	Top         = {.5,  1},
 	TopLeft     = { 0,  1},
-	Left        = { 0, .5},
+	Left        = { 0, .5}, --what percentage of frame height and width, is this point from the BottomLeft corner of the frame. 
 }
 
 -- returns true if <frame> or one of the frames that <frame> is dependent on
@@ -163,6 +163,7 @@ local function FindBestStick(frame, xOff, yOff)
 	local oFrame, index
 	local l, b, w, h = frame:GetScaledRect() --Love this function! so much math effort saved
 	
+	--compare frame to all other frames in frameDatabase
 	for _, f in pairs(framesDatabase) do
 		if f ~= frame and CanAttach(frame, f) then
 			local point, r = nil, math.huge
@@ -173,13 +174,16 @@ local function FindBestStick(frame, xOff, yOff)
 			local pointIndex, oPointindex
 			if oL and oB and oW and oH then
 				for i, info in ipairs(viableStickPoints) do
+				   --compare all points of frame to viable points on otherFrame
 					local possiblePoint, points = unpack(info)
-					local num = #points
+					local num = #points --used to determine which table type we are on. corner or side
 					for j, oPossiblePoint in ipairs(points) do
 						local ignoreCornerToSide = (not AllowCornerToSide) and ((num == 5 and (j == 2 or j == 3)) or ((num == 3) and (j ~= 2)))
 						local ignoreCornerToCorner = (not AllowCornerToCorner) and (num == 5 and (j == 5))
 						
-						if not (ignoreCornerToCorner or ignoreCornerToSide) then
+						
+						
+						if not (ignoreCornerToCorner or ignoreCornerToSide) then --ignore a viable sticky, if we have "corner to corner" or "corner to edge" turned off.
 							local x, y = unpack(position[possiblePoint])
 							x = l + (w * x)
 							y = b + (h * y)
@@ -193,6 +197,7 @@ local function FindBestStick(frame, xOff, yOff)
 							
 							local d = math.min(xDist, yDist)
 							if (xDist < stickyTolerance and yDist < stickyTolerance and d < stickyRange) then
+								--if a point is in stickyTolerance range, save it if it's closer than the last saved one.
 								stickyRange = d
 								pointIndex, oPointindex = i, j
 							end
@@ -201,7 +206,7 @@ local function FindBestStick(frame, xOff, yOff)
 				end
 			end
 			if pointIndex and oPointindex then
-				point, r = pointIndex..oPointindex, stickyRange
+				point, r = pointIndex..oPointindex, stickyRange --encode the point index.
 			end
 			
 			if point and r <= range then
@@ -345,13 +350,28 @@ do
 		return framesDatabase[id]
 	end
 
+	local conversionTable = { --easy conversion from 1.0 to 2.0
+		TL = 71,
+		TR = 54,
+		TC = 63,
+		BL = 14,
+		BR = 31,
+		BC = 22,
+		LB = 51,
+		LT = 34,
+		LC = 42,
+		RB = 74,
+		RT = 11,
+		RC = 82,
+	}
+
 	function FlyPaperMixin:GetAnchor()
 		local anchorString = self.sets.anchor
 		if anchorString then
 			local pointStart = #anchorString
 			local oFrame, pointIndex = Get(anchorString:sub(1, pointStart - 2)), anchorString:sub(pointStart-1)
 			if oFrame and GetPoint(pointIndex) then
-				return oFrame, pointIndex
+				return oFrame, conversionTable[pointIndex] or pointIndex
 			else
 				self:ClearAnchor(anchorString:sub(pointStart-1))
 			end
@@ -493,7 +513,6 @@ end
 
 local function frameHasMovedOrResized(frame, reason)
 	if not LibFlyPaper.Ready then return end
-	print(frame.id, reason)
 	if reason == "isMoving" then
 		--placeholder for now
 			--Perhaps allow active snapping attempts, while frame is moving
@@ -724,6 +743,7 @@ function LibFlyPaper:ActivateForAddon(AddonName)
 		self:ValidatePositions() -- Make sure all frames are on screen, before placing them.
 		self:PositionAllFrames() -- Place all frames.
 		complete = true
+		DominosDB.blah = viableStickPoints
 	end
 	
 	self.Ready = complete
