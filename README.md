@@ -138,7 +138,7 @@ I realize that many of the changes are drastic. Many can be reverted back to Lib
 --     _3_       _2_       _2_
 --      |         |         |
 --   |_5|4_______1|3_______1|5_|3     --the count on corners go 1 2 5 3 4, intentionally out of sequence.
---  2| 1|1        2        3|4 |       --i want corner to corner options listed last later one.
+--  2| 1|1        2        3|4 |       --i want corner to corner options listed last later on.
 --      |                   |         --allows me to make corner to corner optional 
 --  2|_3|                   |1_|2
 --   | 1|8                 4|3 |
@@ -218,7 +218,7 @@ I realize that many of the changes are drastic. Many can be reverted back to Lib
 				},
 			}
 	  
-		Saved anchors are decode with the following function:
+		Saved anchors are decoded with the following function:
 		
 		local function GetPoint(index)
 			local pointIndex, oPointindex = index:sub(1, 1), index:sub(2)
